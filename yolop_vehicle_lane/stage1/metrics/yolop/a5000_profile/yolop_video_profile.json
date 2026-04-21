@@ -1,0 +1,13 @@
+{
+  "config": "YOLOP",
+  "checkpoint": "/content/drive/MyDrive/EcoCAR/yolop_vehicle_lane/stage1/checkpoints/yolop/best_joint.pth",
+  "frames_processed": 267,
+  "mean_latency_ms": 20.1682840149813,
+  "median_latency_ms": 19.410318999973697,
+  "uncapped_pipeline_fps": 49.58280036403619,
+  "source_video_fps": 30.0,
+  "writer_fps": 49.58280036403619,
+  "conf_thres": 0.35,
+  "track_iou": 0.35,
+  "output_video": "/content/drive/MyDrive/EcoCAR/yolop_vehicle_lane/stage1/metrics/yolop/a5000_profile/yolop_inference_output.mp4"
+}
