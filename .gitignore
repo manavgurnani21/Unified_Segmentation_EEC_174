@@ -210,3 +210,9 @@ __marimo__/
 *.mp4
 runs/
 inputs/
+outputs/
+runs/
+
+# models are too large
+*.pt
+*.pth
