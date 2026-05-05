@@ -1,6 +1,0 @@
-{
-  "model_path": "weights/culane_res18.pth",
-  "video_path": "inputs/dashcam_rural.mp4",
-  "output_dir": "outputs/",
-  "num_lanes": 4
-}
