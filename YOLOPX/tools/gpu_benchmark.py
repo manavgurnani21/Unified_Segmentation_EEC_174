@@ -4,7 +4,11 @@ import time
 import torch
 import cv2
 import numpy as np
+import argparse
 from pathlib import Path
+
+print(f"Is CUDA available? {torch.cuda.is_available()}")
+print(f"Current Device: {torch.cuda.get_device_name(0)}")
 
 # Add repo root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -12,73 +16,108 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.models import get_net
 from lib.config import cfg
 
-# ---- CONFIG ----
-VIDEO_PATH = "inputs/dashcam_freeway.mp4"
-WEIGHTS    = "weights/epoch-195.pth"
-IMG_SIZE   = 640
-BATCH_SIZE = 8      # lower if you get OOM (try 4, 2, 1)
-MAX_FRAMES = None    # set to None to use entire video
-DEVICE     = torch.device("cuda:0")
-# ----------------
-
 def preprocess_frame(frame, img_size):
     img = cv2.resize(frame, (img_size, img_size))
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR→RGB, HWC→CHW
     img = np.ascontiguousarray(img)
     return torch.from_numpy(img).float() / 255.0
 
-print("=== Loading model ===")
-model = get_net(cfg)
-checkpoint = torch.load(WEIGHTS, map_location=DEVICE)
-model.load_state_dict(checkpoint['state_dict'])
-model = model.to(DEVICE)
-model.half()   # FP16
-model.eval()
+def main(opt):
+    DEVICE = torch.device(opt.device)
+    
+    print(f"=== Loading model in {opt.precision.upper()} ===")
+    model = get_net(cfg)
+    
+    # Try to load weights if they exist
+    if Path(opt.weights).exists():
+        checkpoint = torch.load(opt.weights, map_location=DEVICE)
+        model.load_state_dict(checkpoint['state_dict'])
+    else:
+        print(f"Warning: Weights {opt.weights} not found. Benchmarking with random weights.")
+        
+    model = model.to(DEVICE)
+    
+    # *** QUANTIZATION TOGGLE ***
+    if opt.precision == "fp16":
+        model.half()   # Convert model weights to 16-bit half precision
+    else:
+        model.float()  # Ensure model weights are 32-bit full precision (default)
+        
+    model.eval()
 
-print("=== Preprocessing frames (CPU) ===")
-cap = cv2.VideoCapture(VIDEO_PATH)
-frames = []
-count = 0
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-    frames.append(preprocess_frame(frame, IMG_SIZE))
-    count += 1
-    if MAX_FRAMES and count >= MAX_FRAMES:
-        break
-    if count % 50 == 0:
-        print(f"  Loaded {count} frames...")
-cap.release()
+    print(f"=== Preprocessing frames (CPU) ===")
+    if not Path(opt.source).exists():
+        print(f"Error: Video file {opt.source} not found! Please provide a valid --source")
+        return
+        
+    cap = cv2.VideoCapture(opt.source)
+    frames = []
+    count = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frames.append(preprocess_frame(frame, opt.img_size))
+        count += 1
+        if opt.max_frames and count >= opt.max_frames:
+            break
+        if count % 50 == 0:
+            print(f"  Loaded {count} frames...")
+    cap.release()
 
-print(f"  Done — {len(frames)} frames loaded")
+    if len(frames) == 0:
+        print("No frames loaded.")
+        return
 
-# Stack and move entire buffer to GPU at once
-all_frames = torch.stack(frames).half().to(DEVICE)  # (N, 3, H, W)
-print(f"  Buffer on GPU: {all_frames.shape}, {all_frames.nbytes / 1e6:.1f} MB")
+    print(f"  Done — {len(frames)} frames loaded")
 
-# Warmup pass (important — first inference is always slow due to CUDA JIT)
-print("=== Warming up ===")
-with torch.no_grad():
-    _ = model(all_frames[:2])
-torch.cuda.synchronize()
+    # Stack and move entire buffer to GPU at once
+    all_frames = torch.stack(frames)
+    
+    # *** DATA QUANTIZATION TOGGLE ***
+    if opt.precision == "fp16":
+        all_frames = all_frames.half() # Convert input data to FP16
+    else:
+        all_frames = all_frames.float() # Keep input data as FP32
+        
+    all_frames = all_frames.to(DEVICE)  # (N, 3, H, W)
+    print(f"  Buffer on GPU: {all_frames.shape}, {all_frames.nbytes / 1e6:.1f} MB")
 
-print("=== Running batched inference ===")
-total_frames = len(frames)
-torch.cuda.synchronize()
-start = time.time()
+    # Warmup pass (important — first inference is always slow due to CUDA JIT)
+    print("=== Warming up ===")
+    with torch.no_grad():
+        _ = model(all_frames[:2])
+    torch.cuda.synchronize()
 
-with torch.no_grad():
-    for i in range(0, total_frames, BATCH_SIZE):
-        batch = all_frames[i:i+BATCH_SIZE]
-        _ = model(batch)
+    print(f"=== Running batched inference (Batch Size: {opt.batch_size}) ===")
+    total_frames = len(frames)
+    torch.cuda.synchronize()
+    start = time.time()
 
-torch.cuda.synchronize()  # wait for all GPU ops to finish before stopping timer
-elapsed = time.time() - start
+    with torch.no_grad():
+        for i in range(0, total_frames, opt.batch_size):
+            batch = all_frames[i:i+opt.batch_size]
+            _ = model(batch)
 
-print(f"\n=== Results ===")
-print(f"  Frames      : {total_frames}")
-print(f"  Batch size  : {BATCH_SIZE}")
-print(f"  Time        : {elapsed:.2f}s")
-print(f"  Pure GPU FPS: {total_frames / elapsed:.1f}")
-print(f"  ms/frame    : {1000 / (total_frames / elapsed):.1f}")
+    torch.cuda.synchronize()  # wait for all GPU ops to finish before stopping timer
+    elapsed = time.time() - start
+
+    print(f"\n=== Results ({opt.precision.upper()}) ===")
+    print(f"  Frames      : {total_frames}")
+    print(f"  Batch size  : {opt.batch_size}")
+    print(f"  Time        : {elapsed:.2f}s")
+    print(f"  Pure GPU FPS: {total_frames / elapsed:.1f}")
+    print(f"  ms/frame    : {1000 / (total_frames / elapsed):.1f}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--weights', type=str, default='weights/epoch-195.pth', help='model.pth path')
+    parser.add_argument('--source', type=str, default='demo/2.gif', help='video/gif path')
+    parser.add_argument('--img-size', type=int, default=640, help='inference size')
+    parser.add_argument('--batch-size', type=int, default=8, help='batch size for benchmarking')
+    parser.add_argument('--max-frames', type=int, default=None, help='max frames to benchmark')
+    parser.add_argument('--device', type=str, default='cuda:0', help='cuda device')
+    parser.add_argument('--precision', type=str, choices=['fp32', 'fp16'], default='fp32', help='Precision mode')
+    opt = parser.parse_args()
+    
+    main(opt)
