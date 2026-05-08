@@ -1,0 +1,20 @@
+Is CUDA available? True
+Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
+=== Loading model in FP16 ===
+Warning: Weights weights/epoch-195.pth not found. Benchmarking with random weights.
+=== Preprocessing frames (CPU) ===
+  Loaded 50 frames...
+  Loaded 100 frames...
+  Loaded 150 frames...
+  Loaded 200 frames...
+  Done — 212 frames loaded
+  Buffer on GPU: torch.Size([212, 3, 640, 640]), 521.0 MB
+=== Warming up ===
+=== Running batched inference (Batch Size: 8) ===
+
+=== Results (FP16) ===
+  Frames      : 212
+  Batch size  : 8
+  Time        : 3.22s
+  Pure GPU FPS: 65.8
+  ms/frame    : 15.2
