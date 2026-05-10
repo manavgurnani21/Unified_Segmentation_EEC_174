@@ -20,6 +20,7 @@ from .losses import (
     FusionLaneLoss,
     UncertaintyMultiTaskLoss,
     compute_grad_cosine,
+    compute_grad_norm_ratio,
 )
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     'FusionLaneLoss',
     'UncertaintyMultiTaskLoss',
     'compute_grad_cosine',
+    'compute_grad_norm_ratio',
     'DetectionLossConfig',
     'SimpleVehicleDetectionHead',
     'SimpleVehicleDetectionLoss',
@@ -40,3 +42,7 @@ __all__ = [
 ]
 
 from .detection import DetectionLossConfig, SimpleVehicleDetectionHead, SimpleVehicleDetectionLoss, read_yolo_label
+from .experiment_factory import build_joint_model
+from .detection import DETRVehicleDetectionHead, DETRVehicleDetectionLoss
+
+from .yolo26_inspired import YOLO26InspiredJointBackboneNeck

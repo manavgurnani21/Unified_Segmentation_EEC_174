@@ -1,23 +1,6 @@
-"""Minimal Stage 2 fusion model wrapper.
-
-This is intentionally a thin glue layer between:
-  - a feature-producing backbone+neck (CSP / RMT / YOLO26 / etc.)
-  - a detection head (YOLOPX or RT-DETR)
-  - the in-house CLRKD-style curve lane head
-
-The motivation is that Stage 2 experiments differ mainly in WHICH backbone
-and detection head are plugged in. The lane head and loss stay the same
-across experiments 3-6, so a single small wrapper makes those comparisons
-honest.
-
-This file does NOT bundle a backbone — call sites pass one in. Constructing
-the actual backbone is left to the experiment notebook so that vendored
-RMT / YOLO26 imports stay scoped to their experiment.
-"""
-
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -26,18 +9,6 @@ from .lane_head import CurveLaneHead
 
 
 class FusionModel(nn.Module):
-    """Wrapper that combines a feature backbone with a lane head and a
-    detection head.
-
-    The backbone is expected to return a list of feature maps. The
-    detection head is expected to be an `nn.Module` whose forward
-    accepts that list and returns a detector-specific output (loss
-    structure handled by detector-specific code at the call site).
-
-    The lane branch always outputs (cls_logits, coord_pred, mask_logit)
-    in the format consumed by `FusionLaneLoss`.
-    """
-
     def __init__(
         self,
         backbone: nn.Module,
@@ -53,39 +24,42 @@ class FusionModel(nn.Module):
         self.backbone = backbone
         self.feature_channels = list(feature_channels)
         self.detection_head = detection_head
-
-        # By default, send all feature scales to the lane head.
-        if lane_in_indices is None:
-            self.lane_in_indices = list(range(len(feature_channels)))
-        else:
-            self.lane_in_indices = list(lane_in_indices)
-
+        self.lane_in_indices = list(range(len(feature_channels))) if lane_in_indices is None else list(lane_in_indices)
         if lane_head is None:
             lane_channels = [self.feature_channels[i] for i in self.lane_in_indices]
-            self.lane_head = CurveLaneHead(
-                in_channels=lane_channels,
-                max_lanes=max_lanes,
-                num_points=num_points,
-                mask_size=mask_size,
-            )
+            self.lane_head = CurveLaneHead(in_channels=lane_channels, max_lanes=max_lanes, num_points=num_points, mask_size=mask_size)
         else:
             self.lane_head = lane_head
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
-        feats = self.backbone(x)
-        if not isinstance(feats, (list, tuple)):
-            feats = [feats]
-        feats = list(feats)
-
-        lane_feats = [feats[i] for i in self.lane_in_indices]
+    def forward(self, x: torch.Tensor) -> Dict[str, object]:
+        raw_feats = self.backbone(x)
+        aux: Dict[str, object] = {}
+        if isinstance(raw_feats, dict):
+            shared_feats = raw_feats.get('shared', raw_feats.get('features', raw_feats.get('det')))
+            det_feats = raw_feats.get('det', shared_feats)
+            lane_source_feats = raw_feats.get('lane', shared_feats)
+            aux = {k: v for k, v in raw_feats.items() if k not in {'shared', 'features', 'det', 'lane'}}
+        else:
+            shared_feats = raw_feats
+            det_feats = raw_feats
+            lane_source_feats = raw_feats
+        if not isinstance(shared_feats, (list, tuple)):
+            shared_feats = [shared_feats]
+        if not isinstance(det_feats, (list, tuple)):
+            det_feats = [det_feats]
+        if not isinstance(lane_source_feats, (list, tuple)):
+            lane_source_feats = [lane_source_feats]
+        shared_feats = list(shared_feats)
+        det_feats = list(det_feats)
+        lane_source_feats = list(lane_source_feats)
+        lane_feats = [lane_source_feats[i] for i in self.lane_in_indices]
         lane_out = self.lane_head(lane_feats)
-
-        det_out = None
-        if self.detection_head is not None:
-            det_out = self.detection_head(feats)
-
+        det_out = self.detection_head(det_feats) if self.detection_head is not None else None
         return {
             'lane': lane_out,
             'det': det_out,
-            'features': feats,
+            'features': shared_feats,
+            'det_features': det_feats,
+            'lane_features': lane_source_feats,
+            'aux': aux,
         }
