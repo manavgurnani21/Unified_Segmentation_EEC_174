@@ -39,6 +39,7 @@ def parse_args():
     parser.add_argument('--weights', nargs='+', type=str, default='/media/jiao/39b48156-5afd-4cd7-bddc-f6ecf4631a79/zhanjiao/workspace/YOLOPX-main/weights/epoch-195.pth', help='model.pth path(s)')
     parser.add_argument('--conf_thres', type=float, default=0.001, help='object confidence threshold')
     parser.add_argument('--iou_thres', type=float, default=0.6, help='IOU threshold for NMS')
+    parser.add_argument('--precision', type=str, choices=['fp32', 'fp16'], default='fp32', help='Precision mode')
     args = parser.parse_args()
 
     return args
@@ -81,7 +82,7 @@ def main():
 
     # det_idx_range = [str(i) for i in range(0,25)]
     model_dict = model.state_dict()
-    checkpoint_file = args.weights
+    checkpoint_file = args.weights[0] if isinstance(args.weights, list) else args.weights
     logger.info("=> loading checkpoint '{}'".format(checkpoint_file))
     checkpoint = torch.load(checkpoint_file)
     checkpoint_dict = checkpoint['state_dict']
@@ -93,6 +94,10 @@ def main():
     model = model.to(device)
     model.gr = 1.0
     model.nc = 1
+    
+    if args.precision == 'fp16':
+        model.half()
+        
     print('bulid model finished')
 
     print("begin to load data")

@@ -18,3 +18,10 @@ Warning: Weights weights/epoch-195.pth not found. Benchmarking with random weigh
   Time        : 4.88s
   Pure GPU FPS: 43.4
   ms/frame    : 23.0
+
+=== Accuracy Metrics (BDD100K Kaggle Subset) ===
+Test:    Loss(0.385)
+Driving area Segment: Acc(0.822)    IOU (0.000)    mIOU(0.411)
+Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.487)
+Detect: P(0.034)  R(0.937)  mAP@0.5(0.833)  mAP@0.5:0.95(0.487)
+Time: inference(0.0138s/frame)  nms(0.0016s/frame)

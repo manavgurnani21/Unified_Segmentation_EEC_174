@@ -219,3 +219,21 @@ runs/
 
 # venvs are too large
 *env/
+
+# Huge datasets and zip files
+bdd100k/
+bdd100k_labels_release/
+bdd100k_seg/
+data/
+*.zip
+
+# Python environment and caches
+venv/
+pip_cache/
+pip_tmp/
+__pycache__/
+*.pyc
+
+# Heavy weights and logs
+YOLOPX/runs/
+YOLOPX/weights/*.pth

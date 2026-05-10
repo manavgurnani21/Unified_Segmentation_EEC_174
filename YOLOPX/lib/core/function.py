@@ -188,6 +188,8 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     for batch_i, (img, target, paths, shapes) in tqdm(enumerate(val_loader), total=len(val_loader)):
         if not config.DEBUG:
             img = img.to(device, non_blocking=True)
+            if next(model.parameters()).dtype == torch.float16:
+                img = img.half()
             assign_target = []
             for tgt in target:
                 assign_target.append(tgt.to(device))

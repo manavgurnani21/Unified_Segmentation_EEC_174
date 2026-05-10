@@ -56,7 +56,7 @@ class AutoDriveDataset(Dataset):
         self.mask_root = mask_root / indicator
         self.lane_root = lane_root / indicator
         # self.label_list = self.label_root.iterdir()
-        self.mask_list = self.mask_root.iterdir()
+        self.mask_list = list(self.mask_root.iterdir())
 
         # albumentation data arguments
         self.albumentations_transform = A.Compose([
