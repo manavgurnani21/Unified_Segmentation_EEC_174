@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from lib.models.common import Conv, DWConv, GhostConv, RepConv
 
 def meshgrid(*tensors):
-        return torch.meshgrid(*tensors)
+        return torch.meshgrid(*tensors, indexing='ij')
 
 class YOLOXHead(nn.Module):
     def __init__(

@@ -1,6 +1,6 @@
 # python3 tools/inference.py --weights weights/epoch-195.pth --source inputs/dashcam_freeway.mp4 --save-dir inference/video_output --batch-size 16 --device 0
 
-import argparse, os, sys, time, threading
+import argparse, os, sys, time, threading, csv
 from pathlib import Path
 from queue import Queue
 
@@ -70,9 +70,19 @@ def process(cfg, opt):
     _ = model(dummy.half() if half else dummy)
     model.eval()
 
-    dataset = LoadImages(opt.source, img_size=opt.img_size)
-    total   = len(dataset)
-    print(f"  {total} frames to process\n")
+    if opt.compile:
+        if sys.platform == 'win32':
+            print("[WARNING] torch.compile inductor backend requires Triton which is Linux-only. "
+                  "Skipping --compile on Windows. Use TensorRT for GPU acceleration instead.")
+        else:
+            print("=== torch.compile (this takes ~30s on first run) ===")
+            model = torch.compile(model, mode='reduce-overhead')
+            _ = model(dummy.half() if half else dummy)  # trigger compile
+            print("    done\n")
+
+    dataset      = LoadImages(opt.source, img_size=opt.img_size)
+    _frames_done = [0]
+    print(f"  Processing {opt.source}\n")
 
     decode_queue = Queue(maxsize=8)
     save_queue   = Queue(maxsize=8)
@@ -173,10 +183,11 @@ def process(cfg, opt):
 
             frames_done += len(meta)
             elapsed      = time.time() - t_start
-            print(f"\r[inference] {frames_done}/{total}  "
+            print(f"\r[inference] {frames_done} frames  "
                   f"{frames_done/elapsed:.1f} fps", end='', flush=True)
 
         elapsed = time.time() - t_start
+        _frames_done[0] = frames_done
         print(f"\n[inference] done — {frames_done} frames in "
               f"{elapsed:.2f}s  ({frames_done/elapsed:.1f} fps)")
 
@@ -238,8 +249,35 @@ def process(cfg, opt):
     inference_loop()
     t1.join()
     t3.join()
-    print(f"\nWall time: {time.time()-t_total:.1f}s  "
-          f"({total/(time.time()-t_total):.1f} fps end-to-end)")
+    wall         = time.time() - t_total
+    total_frames = _frames_done[0]
+    e2e_fps      = total_frames / wall if wall > 0 else 0.0
+    print(f"\nWall time: {wall:.1f}s  ({total_frames} frames, {e2e_fps:.1f} fps end-to-end)")
+
+    if opt.log:
+        log_path = Path(opt.log)
+        write_header = not log_path.exists()
+        with open(log_path, 'a', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=[
+                'timestamp', 'source', 'weights', 'device',
+                'batch_size', 'img_size', 'compile',
+                'frames', 'wall_s', 'e2e_fps'
+            ])
+            if write_header:
+                w.writeheader()
+            w.writerow({
+                'timestamp':  time.strftime('%Y-%m-%d %H:%M:%S'),
+                'source':     opt.source,
+                'weights':    opt.weights,
+                'device':     opt.device,
+                'batch_size': opt.batch_size,
+                'img_size':   opt.img_size,
+                'compile':    opt.compile,
+                'frames':     total_frames,
+                'wall_s':     round(wall, 2),
+                'e2e_fps':    round(e2e_fps, 1),
+            })
+        print(f"Speed log appended → {log_path}")
 
 
 if __name__ == '__main__':
@@ -252,5 +290,7 @@ if __name__ == '__main__':
     parser.add_argument('--conf-thres', type=float, default=0.3)
     parser.add_argument('--iou-thres',  type=float, default=0.45)
     parser.add_argument('--device',     type=str,   default='0')
+    parser.add_argument('--compile',    action='store_true', help='torch.compile the model (reduce-overhead mode)')
+    parser.add_argument('--log',        type=str,   default='', help='path to CSV speed log (appended each run)')
     opt = parser.parse_args()
     process(cfg, opt)

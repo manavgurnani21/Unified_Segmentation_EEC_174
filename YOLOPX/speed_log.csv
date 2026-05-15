@@ -1,0 +1,3 @@
+timestamp,source,weights,device,batch_size,img_size,compile,frames,wall_s,e2e_fps
+2026-05-14 23:58:30,.\inputs\RecFile_2_20250421_141341_requestCamera_Camera_Data.avi,weights/yolopx_fp16.trt,0,16,640,1996,11.55,172.7
+2026-05-14 23:59:05,.\inputs\RecFile_2_20250114_143658_requestCamera_Camera_Data.avi,weights/yolopx_fp16.trt,0,16,640,1482,8.18,181.1

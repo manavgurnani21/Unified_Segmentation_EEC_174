@@ -1,4 +1,6 @@
-scipy
+torch>=2.0.0
+torchvision>=0.15.0
+scipy>=1.4.1
 tqdm
 yacs
 Cython
@@ -7,7 +9,6 @@ numpy>=1.18.5
 opencv-python>=4.1.2
 Pillow
 PyYAML>=5.3
-scipy>=1.4.1
 tensorboardX
 seaborn
 imageio
@@ -17,3 +18,4 @@ ptflops
 prefetch-generator
 pretrainedmodels
 h5py
+loguru

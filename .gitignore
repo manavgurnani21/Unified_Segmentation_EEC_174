@@ -216,6 +216,10 @@ runs/
 # models are too large
 *.pt
 *.pth
+*.onnx
+*.trt
 
 # venvs are too large
 *env/
+
+.claude/

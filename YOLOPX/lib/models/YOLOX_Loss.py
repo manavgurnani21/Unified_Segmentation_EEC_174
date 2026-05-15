@@ -12,7 +12,7 @@ import torch.nn.functional as F
 # from lib.utils.utils import bboxes_iou, meshgrid
 # from lib.core.loss import FocalLoss
 def meshgrid(*tensors):
-        return torch.meshgrid(*tensors)
+        return torch.meshgrid(*tensors, indexing='ij')
 
 def bboxes_iou(bboxes_a, bboxes_b, xyxy=True):
     if bboxes_a.shape[1] != 4 or bboxes_b.shape[1] != 4:
