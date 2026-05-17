@@ -111,10 +111,6 @@ def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_bat
                 # writer.add_scalar('train_acc', acc.val, global_steps)
                 writer_dict['train_global_steps'] = global_steps + 1
 
-        if i >= 50:
-            logger.info("Stopping training early after 50 batches for demonstration purposes.")
-            break
-
 def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir,
              tb_log_dir, writer_dict=None, logger=None, device='cpu', rank=-1):
     """
