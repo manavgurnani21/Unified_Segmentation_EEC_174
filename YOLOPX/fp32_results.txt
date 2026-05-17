@@ -1,7 +1,6 @@
 Is CUDA available? True
 Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
-=== Loading model in FP32 ===
-Warning: Weights weights/epoch-195.pth not found. Benchmarking with random weights.
+=== Loading model in FP32 (ReLU Architecture) ===
 === Preprocessing frames (CPU) ===
   Loaded 50 frames...
   Loaded 100 frames...
@@ -15,13 +14,13 @@ Warning: Weights weights/epoch-195.pth not found. Benchmarking with random weigh
 === Results (FP32) ===
   Frames      : 212
   Batch size  : 8
-  Time        : 4.88s
-  Pure GPU FPS: 43.4
-  ms/frame    : 23.0
+  Time        : 7.32s
+  Pure GPU FPS: 28.9
+  ms/frame    : 34.5
 
 === Accuracy Metrics (BDD100K Kaggle Subset) ===
-Test:    Loss(0.385)
-Driving area Segment: Acc(0.822)    IOU (0.000)    mIOU(0.411)
-Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.487)
-Detect: P(0.034)  R(0.937)  mAP@0.5(0.833)  mAP@0.5:0.95(0.487)
-Time: inference(0.0138s/frame)  nms(0.0016s/frame)
+* Note: Accuracy metrics reflect a truncated demonstration training run. Full training is required to recover baseline accuracy.
+Driving area Segment: Acc(1.000)    IOU (0.000)    mIOU(0.500)
+Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.500)
+Detect: P(0.000)  R(0.002)  mAP@0.5(0.000)  mAP@0.5:0.95(0.000)
+Time: inference(0.0228s/frame)  nms(0.0021s/frame)

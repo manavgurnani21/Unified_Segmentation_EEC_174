@@ -14,6 +14,6 @@ Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
 === Results (Native TensorRT INT8) ===
   Frames      : 208 (out of 212)
   Batch size  : 8
-  Time        : 2.00s
-  Pure GPU FPS: 103.9
-  ms/frame    : 9.6
+  Time        : 3.43s
+  Pure GPU FPS: 60.6
+  ms/frame    : 16.5
