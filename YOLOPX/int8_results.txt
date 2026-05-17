@@ -1,0 +1,26 @@
+Is CUDA available? True
+Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
+=== Loading model in INT8 (ONNXRuntime) ===
+=== Preprocessing frames (CPU) ===
+  Loaded 50 frames...
+  Loaded 100 frames...
+  Loaded 150 frames...
+  Loaded 200 frames...
+  Done — 212 frames loaded
+=== Warming up ===
+=== Running batched inference (Batch Size: 8) ===
+  Skipping last batch of size 4 (requires strict batch size 8)
+
+=== Results (INT8 ONNXRuntime) ===
+  Frames      : 208 (out of 212)
+  Batch size  : 8
+  Time        : 29.71s
+  Pure GPU FPS: 7.1
+  ms/frame    : 140.1
+
+=== Accuracy Metrics (BDD100K Kaggle Subset) ===
+Test Complete:
+Driving area Segment: Acc(0.826)    IOU (0.000)    mIOU(0.413)
+Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.486)
+Detect: P(0.033)  R(0.925)  mAP@0.5(0.675)  mAP@0.5:0.95(0.340)
+Time: inference(0.0442s/frame)  nms(0.1517s/frame)

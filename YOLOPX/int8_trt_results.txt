@@ -1,0 +1,19 @@
+Is CUDA available? True
+Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
+=== Loading model in Native INT8 (TensorRT) ===
+=== Preprocessing frames (CPU) ===
+  Loaded 50 frames...
+  Loaded 100 frames...
+  Loaded 150 frames...
+  Loaded 200 frames...
+  Done — 212 frames loaded
+=== Warming up ===
+=== Running batched inference (Batch Size: 8) ===
+  Skipping last batch of size 4
+
+=== Results (Native TensorRT INT8) ===
+  Frames      : 208 (out of 212)
+  Batch size  : 8
+  Time        : 2.00s
+  Pure GPU FPS: 103.9
+  ms/frame    : 9.6
