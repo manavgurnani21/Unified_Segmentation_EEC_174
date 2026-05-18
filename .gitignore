@@ -237,3 +237,9 @@ __pycache__/
 # Heavy weights and logs
 YOLOPX/runs/
 YOLOPX/weights/*.pth
+YOLOPX/weights/*.onnx
+YOLOPX/weights/*.onnx.data
+YOLOPX/weights/*.engine
+YOLOPX/weights/*.cache
+cloud_package/
+pytorch-quantization/
