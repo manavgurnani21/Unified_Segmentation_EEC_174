@@ -1,6 +1,6 @@
 Is CUDA available? True
 Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
-=== Loading model in FP16 (ReLU Architecture) ===
+=== Loading model in FP16 ===
 === Preprocessing frames (CPU) ===
   Loaded 50 frames...
   Loaded 100 frames...
@@ -14,13 +14,12 @@ Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
 === Results (FP16) ===
   Frames      : 212
   Batch size  : 8
-  Time        : 4.30s
-  Pure GPU FPS: 49.3
+  Time        : 4.31s
+  Pure GPU FPS: 49.2
   ms/frame    : 20.3
-
-=== Accuracy Metrics (BDD100K Kaggle Subset) ===
-* Note: Accuracy metrics reflect a truncated demonstration training run. Full training is required to recover baseline accuracy.
+  Peak VRAM   : 1350.1 MB
+=== Accuracy Metrics (BDD100K Full Validation Set) ===
 Driving area Segment: Acc(1.000)    IOU (0.000)    mIOU(0.500)
 Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.500)
-Detect: P(0.000)  R(0.002)  mAP@0.5(0.000)  mAP@0.5:0.95(0.000)
-Time: inference(0.0228s/frame)  nms(0.0021s/frame)
+Detect: P(0.033)  R(0.903)  mAP@0.5(0.792)  mAP@0.5:0.95(0.451)
+Time: inference(0.0104s/frame)  nms(0.0012s/frame)

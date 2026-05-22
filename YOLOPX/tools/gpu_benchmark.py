@@ -12,10 +12,12 @@ print(f"Current Device: {torch.cuda.get_device_name(0)}")
 
 # Add repo root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
+import sys
+if '--precision' in sys.argv and 'int8' in sys.argv:
+    from pytorch_quantization import quant_modules
+    quant_modules.initialize()
 from lib.models import get_net
 from lib.config import cfg
-
 def preprocess_frame(frame, img_size):
     img = cv2.resize(frame, (img_size, img_size))
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR→RGB, HWC→CHW
@@ -108,6 +110,10 @@ def main(opt):
     print(f"  Time        : {elapsed:.2f}s")
     print(f"  Pure GPU FPS: {total_frames / elapsed:.1f}")
     print(f"  ms/frame    : {1000 / (total_frames / elapsed):.1f}")
+    
+    # Calculate and print peak VRAM
+    peak_vram = torch.cuda.max_memory_allocated(DEVICE) / (1024 ** 2)
+    print(f"  Peak VRAM   : {peak_vram:.1f} MB")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -117,7 +123,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int, default=8, help='batch size for benchmarking')
     parser.add_argument('--max-frames', type=int, default=None, help='max frames to benchmark')
     parser.add_argument('--device', type=str, default='cuda:0', help='cuda device')
-    parser.add_argument('--precision', type=str, choices=['fp32', 'fp16'], default='fp32', help='Precision mode')
+    parser.add_argument('--precision', type=str, choices=['fp32', 'fp16', 'int8'], default='fp32', help='Precision mode')
     opt = parser.parse_args()
     
     main(opt)

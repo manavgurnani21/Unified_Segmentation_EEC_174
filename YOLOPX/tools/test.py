@@ -4,6 +4,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
 import pprint
+if '--precision' in sys.argv and 'int8' in sys.argv:
+    from pytorch_quantization import quant_modules
+    quant_modules.initialize()
 import torch
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
@@ -39,7 +42,7 @@ def parse_args():
     parser.add_argument('--weights', nargs='+', type=str, default='/media/jiao/39b48156-5afd-4cd7-bddc-f6ecf4631a79/zhanjiao/workspace/YOLOPX-main/weights/epoch-195.pth', help='model.pth path(s)')
     parser.add_argument('--conf_thres', type=float, default=0.001, help='object confidence threshold')
     parser.add_argument('--iou_thres', type=float, default=0.6, help='IOU threshold for NMS')
-    parser.add_argument('--precision', type=str, choices=['fp32', 'fp16'], default='fp32', help='Precision mode')
+    parser.add_argument('--precision', type=str, choices=['fp32', 'fp16', 'int8'], default='fp32', help='Precision mode')
     args = parser.parse_args()
 
     return args

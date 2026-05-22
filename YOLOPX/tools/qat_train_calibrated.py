@@ -67,7 +67,7 @@ def main():
     # 2. Initialize QAT Model
     print("Building QAT Model...")
     model = get_net(cfg)
-    checkpoint = torch.load('YOLOPX/weights/relu_wrapped.pth', map_location='cpu')
+    checkpoint = torch.load('YOLOPX/weights/final_state_wrapped.pth', map_location='cpu')
     model.load_state_dict(checkpoint['state_dict'], strict=False)
     model.to(device)
 
