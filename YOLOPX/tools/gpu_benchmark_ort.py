@@ -1,9 +1,16 @@
 import onnxruntime as ort
 import numpy as np
+import os, sys, glob
 import time
 import cv2
 import argparse
 from pathlib import Path
+
+# Auto-fix LD_LIBRARY_PATH for ONNXRuntime CUDAExecutionProvider
+nvidia_libs = glob.glob(os.path.join(os.path.dirname(sys.executable), '../lib/python*/site-packages/nvidia/*/lib'))
+if nvidia_libs and nvidia_libs[0] not in os.environ.get('LD_LIBRARY_PATH', ''):
+    os.environ['LD_LIBRARY_PATH'] = ':'.join(nvidia_libs) + ':' + os.environ.get('LD_LIBRARY_PATH', '')
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 def preprocess_frame(frame, img_size):
     img = cv2.resize(frame, (img_size, img_size))

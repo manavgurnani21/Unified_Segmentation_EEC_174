@@ -1,5 +1,11 @@
 import argparse
-import os, sys
+import os, sys, glob
+# Auto-fix LD_LIBRARY_PATH for ONNXRuntime CUDAExecutionProvider
+nvidia_libs = glob.glob(os.path.join(os.path.dirname(sys.executable), '../lib/python*/site-packages/nvidia/*/lib'))
+if nvidia_libs and nvidia_libs[0] not in os.environ.get('LD_LIBRARY_PATH', ''):
+    os.environ['LD_LIBRARY_PATH'] = ':'.join(nvidia_libs) + ':' + os.environ.get('LD_LIBRARY_PATH', '')
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 

@@ -17,6 +17,7 @@ def build_engine(onnx_file_path, engine_file_path):
     
     # Enable FP16 fallback
     config.set_flag(trt.BuilderFlag.FP16)
+    config.set_flag(trt.BuilderFlag.INT8) # REQUIRED for QDQ graphs to use INT8 math!
     config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
     # NO CALIBRATOR needed because the ONNX already contains QDQ nodes (QAT)
 

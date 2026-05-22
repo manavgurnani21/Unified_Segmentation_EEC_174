@@ -1,25 +1,19 @@
-Is CUDA available? True
-Current Device: NVIDIA GeForce RTX 5060 Laptop GPU
-=== Loading model in INT8 ===
-=== Preprocessing frames (CPU) ===
-  Loaded 50 frames...
-  Loaded 100 frames...
-  Loaded 150 frames...
-  Loaded 200 frames...
-  Done — 212 frames loaded
-  Buffer on GPU: torch.Size([212, 3, 640, 640]), 1042.0 MB
-=== Warming up ===
-=== Running batched inference (Batch Size: 8) ===
+=== Results (ONNXRuntime INT8 QDQ) ===
+  Pure GPU FPS: 34.6
+  ms/frame    : 28.9
 
-=== Results (INT8) ===
-  Frames      : 212
-  Batch size  : 8
-  Time        : 6.02s
-  Pure GPU FPS: 35.2
-  ms/frame    : 28.4
-  Peak VRAM   : 2518.2 MB
-=== Accuracy Metrics (BDD100K Full Validation Set, PyTorch Native QAT Simulation) ===
+=== Accuracy Metrics (BDD100K Full Validation Set, ONNXRuntime Native) ===
 Driving area Segment: Acc(1.000)    IOU (0.000)    mIOU(0.500)
 Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.500)
-Detect: P(0.033)  R(0.906)  mAP@0.5(0.751)  mAP@0.5:0.95(0.334)
-Time: inference(0.0170s/frame)  nms(0.0011s/frame)
+Detect: P(0.033)  R(0.904)  mAP@0.5(0.793)  mAP@0.5:0.95(0.455)
+Time: inference(0.0292s/frame)  nms(0.0766s/frame)
+
+=== Results (Native TensorRT INT8) ===
+  Pure GPU FPS: 159.8
+  ms/frame    : 6.3
+
+=== Accuracy Metrics (BDD100K Full Validation Set, Native TensorRT INT8) ===
+Driving area Segment: Acc(0.999)    IOU (0.000)    mIOU(0.500)
+Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.500)
+Detect: P(0.024)  R(0.665)  mAP@0.5(0.405)  mAP@0.5:0.95(0.186)
+Time: inference(0.0059s/frame)  nms(0.0681s/frame)
