@@ -1,0 +1,13 @@
+=== Loading ONNX model in ONNXRuntime (CUDA) ===
+=== Preprocessing frames ===
+  Done — 212 frames loaded
+=== Warming up ===
+=== Running batched inference (Batch Size: 8) ===
+  Skipping last batch of size 4 (requires strict batch size 8)
+
+=== Results (ONNXRuntime INT8 QDQ) ===
+  Frames      : 208 (out of 212)
+  Batch size  : 8
+  Time        : 6.14s
+  Pure GPU FPS: 34.6
+  ms/frame    : 28.9

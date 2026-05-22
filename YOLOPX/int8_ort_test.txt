@@ -1,0 +1,11 @@
+=> creating runs/BddDataset/_2026-05-21-23-43
+=== Loading ONNX model in ONNXRuntime (CUDA) ===
+begin to load data
+building database...
+database build finish
+load data finished
+Test Complete:
+Driving area Segment: Acc(1.000)    IOU (0.000)    mIOU(0.500)
+Lane line Segment: Acc(0.000)    IOU (0.000)  mIOU(0.500)
+Detect: P(0.033)  R(0.904)  mAP@0.5(0.793)  mAP@0.5:0.95(0.455)
+Time: inference(0.0292s/frame)  nms(0.0766s/frame)
