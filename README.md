@@ -6,17 +6,17 @@ By Rami Abudamous, Gregory Ceron, Siyun Chen, Tyson-Tien Nguyen, and Manav Gurna
 ### Requirements:
 - The model was run on Windows 11 using a WSL Ubuntu environment
 - An NVIDIA GPU with:
- - nvdec/nvenc support
- - CUDA version 11.x or newer
-- FFmpeg with nvenc support
+  - nvdec/nvenc support
+  - CUDA version 11.x or newer
+  - FFmpeg with nvenc support
 
 ### Installation Steps:
-- Install the requirements from `requirements.txt`
+- Install the Python packages from `requirements.txt`
 - Ensure that NVIDIA DALI is matched to the version of CUDA (ex cuda120 for 12.0, cuda118 for 11.8, etc). It may need to be installed from the NVIDIA index:
 ```
 pip install --extra-index-url https://developer.download.nvidia.com/compute/redist nvidia-dali-cuda120
 ```
--# Note that this installs the version for cuda120
+> Note that this installs the version for cuda120
 
 ## Usage:
 ### Preparation:
