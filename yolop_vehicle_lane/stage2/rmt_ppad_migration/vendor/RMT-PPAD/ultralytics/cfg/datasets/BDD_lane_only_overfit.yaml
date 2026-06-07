@@ -1,0 +1,19 @@
+# BDD100K lane-only config for the NB95 OVERFIT capability probe.
+# train == val == the same tiny image set (memorization test). The
+# notebook copies images/train2017 into images/val2017 so a working
+# lane head MUST drive val IoU up.
+path: /content/bdd_overfit32
+train: images/train2017
+val: images/val2017
+test: images/val2017
+
+names:
+  0: vehicle
+  1: lane
+
+type_task:
+  detection: [0]
+  segmentation: [1]
+
+lane_targets_root: /content/bdd_overfit32/lane_targets
+lane_targets_split_map: {}

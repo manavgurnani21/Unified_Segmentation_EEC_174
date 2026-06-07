@@ -151,6 +151,29 @@ def build_joint_model(cfg: Dict) -> FusionModel:
             dim_feedforward=int(lane_cfg.get('dim_feedforward', 512)),
             dropout=float(lane_cfg.get('dropout', 0.1)),
         )
+    elif lane_head_type in {'clrnet_official', 'vendor_clrnet', 'clrnet_vendor'}:
+        # Option C smoke test: drive CLRKDNet's actual CLRHead from our
+        # backbone. See stage2/fusion/vendor_clrnet_head.py for caveats.
+        from .vendor_clrnet_head import VendorCLRNetHead
+        img_h, img_w = cfg['dataset'].get('image_size', [384, 640])
+        lane_head = VendorCLRNetHead(
+            in_channels=feature_channels,
+            prior_feat_channels=int(lane_cfg.get('prior_feat_channels', 64)),
+            num_priors=int(lane_cfg.get('num_priors', 192)),
+            num_points=int(lane_cfg.get('num_points', cfg['dataset'].get('num_points', 72))),
+            sample_points=int(lane_cfg.get('sample_points', 36)),
+            refine_layers=int(lane_cfg.get('refine_layers', 3)),
+            fc_hidden_dim=int(lane_cfg.get('fc_hidden_dim', 64)),
+            num_fc=int(lane_cfg.get('num_fc', 2)),
+            img_h=int(img_h),
+            img_w=int(img_w),
+            num_classes=int(lane_cfg.get('seg_num_classes', 2)),
+            bg_weight=float(lane_cfg.get('bg_weight', 0.4)),
+            ignore_label=int(lane_cfg.get('ignore_label', 255)),
+            max_lanes=int(lane_cfg.get('max_lanes', cfg['dataset'].get('max_lanes', 10))),
+            num_lane_classes=int(lane_cfg.get('num_lane_classes', 7)),
+            mask_size=tuple(lane_cfg.get('mask_size', cfg['dataset'].get('aux_mask_size', [72, 128]))),
+        )
     elif lane_head_type in {'clrkd', 'clrkd_lane_head', 'clrkd_roi_gather', 'exp2g', 'exp2h', 'exp2i', 'exp2j'}:
         lane_head = CLRKDLaneHead(
             in_channels=feature_channels,

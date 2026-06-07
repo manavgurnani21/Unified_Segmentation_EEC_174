@@ -1,0 +1,1 @@
+PASS LaneIoU matches CLRerNet (steep LaneIoU=0.691 > line_iou=0.648; loss near=0.099<far=0.687)

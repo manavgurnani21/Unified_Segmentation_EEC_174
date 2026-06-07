@@ -53,8 +53,18 @@ class FusionLossConfig:
     match_cost_point: float = 5.0
     match_cost_iou: float = 2.0
     match_cost_xytl: float = 0.2
-    lane_assigner: str = 'hungarian'  # 'hungarian' baseline; 'dynamic_k' is a CLRKD-style optional assigner.
+    lane_assigner: str = 'hungarian'  # 'hungarian' | 'dynamic_k' | 'topk_fixed'
     dynamic_k_topk: int = 8
+    # Exp2WW: fixed K-per-GT matching. Each GT takes top `topk_fixed_per_gt`
+    # priors by cost, with conflict resolution (each prior matches at most
+    # one GT). Unlike dynamic_k which uses sum(top-k IoUs) to estimate K
+    # (typically 2-4 in practice and varies batch to batch), fixed K
+    # produces deterministic labels per cost matrix -> stable supervision
+    # for cls. Used by Exp2WW with K=8 -> ~40 positives per image (anchor-
+    # density geometric supervision) AND stable labels (so cls escapes the
+    # uniform-sigmoid equilibrium that has collapsed every prior anchor-
+    # head experiment).
+    topk_fixed_per_gt: int = 8
 
     # Focal loss params for lane existence/classification.
     focal_alpha: float = 0.25
@@ -98,6 +108,14 @@ class FusionLossConfig:
     # 0.5 = sqrt rescaling: compresses high IoU, expands low IoU so even
     # near-prior misses carry a meaningful supervision signal. Used by Exp2M.
     lineiou_target_pow: float = 1.0
+    # VarifocalLoss (Zhang 2021, used by RTMDet/VarifocalNet). Positives
+    # weighted by target IoU (no `(1-alpha)` discount), negatives weighted
+    # by `alpha * pred^gamma` (only confident-wrong negatives contribute).
+    # Designed for moderate class imbalance (1:30 to 1:100) where standard
+    # focal alpha=0.25 sets the symmetric equilibrium that has been
+    # collapsing our cls. Used by Exp2QQ.
+    vfl_alpha: float = 0.75
+    vfl_gamma: float = 2.0
 
     # OHEM / hard-negative mining for lane existence classification.
     # When cls_ohem_topk_per_pos > 0, the negative cls loss is computed only
@@ -213,7 +231,7 @@ def _binary_cls_raw(
     target: torch.Tensor,
     cfg: 'FusionLossConfig',
 ) -> torch.Tensor:
-    """Dispatch between standard focal and ASL based on cfg.cls_loss_type."""
+    """Dispatch between standard focal, ASL, and VFL based on cfg.cls_loss_type."""
     loss_type = str(getattr(cfg, 'cls_loss_type', 'focal')).lower()
     if loss_type == 'asl':
         return _binary_asl_loss(
@@ -222,6 +240,16 @@ def _binary_cls_raw(
             gamma_pos=float(getattr(cfg, 'asl_gamma_pos', 0.0)),
             gamma_neg=float(getattr(cfg, 'asl_gamma_neg', 4.0)),
             clip=float(getattr(cfg, 'asl_clip', 0.05)),
+            reduction='none',
+        )
+    if loss_type in {'vfl', 'varifocal'}:
+        # VFL on binary {0, 1} matched_existence target. Same asymmetric
+        # weighting as on the continuous IoU target -- positives carry full
+        # weight (target=1), negatives only contribute when sigmoid is high.
+        return _varifocal_loss(
+            logit, target,
+            alpha=float(getattr(cfg, 'vfl_alpha', 0.75)),
+            gamma=float(getattr(cfg, 'vfl_gamma', 2.0)),
             reduction='none',
         )
     return _binary_focal_loss(
@@ -268,6 +296,49 @@ def _quality_focal_loss(
     p = torch.sigmoid(logit)
     bce = F.binary_cross_entropy_with_logits(logit, target, reduction='none')
     weight = (target - p).abs().clamp(min=0.0).pow(gamma)
+    loss = weight * bce
+    if reduction == 'mean':
+        return loss.mean()
+    if reduction == 'sum':
+        return loss.sum()
+    return loss
+
+
+def _varifocal_loss(
+    logit: torch.Tensor,
+    target: torch.Tensor,
+    alpha: float = 0.75,
+    gamma: float = 2.0,
+    reduction: str = 'none',
+) -> torch.Tensor:
+    """Varifocal Loss (Zhang et al. CVPR 2021), used by RTMDet/VarifocalNet.
+
+    Weight is asymmetric in target:
+      - For positives (target > 0): weight = target (the IoU itself, so
+        good-IoU priors carry more loss; below-threshold ones get tiny weight).
+      - For negatives (target == 0): weight = alpha * sigmoid(logit)^gamma
+        (only confident-wrong negatives count; uniform-sigmoid negatives get
+        tiny weight).
+
+    Critically, there is NO `(1-alpha)` discount on positives. With our 5:187
+    pos:neg ratio per image, plain ASL with alpha=0.25 set positive gradient
+    weight to 0.25 / total -> degenerate equilibrium at sigmoid ~ 0.5
+    everywhere across NB39/40/41/42/43/45. VFL flips that: positives get full
+    `target` weight, negatives get only `alpha * pred^gamma`. The asymmetry
+    breaks the symmetric local minimum.
+
+    target can be {0, 1} (binary cls) or continuous IoU in [0, 1] (RTMDet
+    style). Continuous target is the recommended combination.
+    """
+    target = target.float()
+    p = torch.sigmoid(logit)
+    bce = F.binary_cross_entropy_with_logits(logit, target, reduction='none')
+    pos_mask = target > 0
+    weight = torch.where(
+        pos_mask,
+        target,                              # positives weighted by target value
+        alpha * p.pow(gamma) * (1.0 - target),  # negatives: confident-wrong only
+    )
     loss = weight * bce
     if reduction == 'mean':
         return loss.mean()
@@ -432,6 +503,41 @@ def _hungarian_match(cost: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         return torch.stack(pairs_q).long(), torch.stack(pairs_g).long()
 
 
+def _topk_fixed_match(cost: torch.Tensor, topk: int = 8) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Top-K-by-cost matching with conflict resolution.
+
+    For each GT lane, take the K priors with the lowest cost. If a prior
+    is selected by multiple GTs, assign it to the GT it has lowest cost
+    against (this is the same conflict-resolution as `_dynamic_k_match`).
+
+    Difference vs `_dynamic_k_match`: K is FIXED per GT (no IoU-sum
+    estimation), so the per-prior labels are deterministic given the cost
+    matrix and don't flicker batch-to-batch the way dynamic-k does. This
+    is the Exp2WW fix for the cls collapse on the anchor head: dense
+    geometric supervision (K=8 priors per GT, ~40 positives per image)
+    AND stable labels (cls can actually train discriminatively).
+    """
+    if cost.numel() == 0:
+        device = cost.device
+        return torch.zeros((0,), dtype=torch.long, device=device), torch.zeros((0,), dtype=torch.long, device=device)
+    q, n = cost.shape
+    k = min(int(max(1, topk)), q)
+    matching = torch.zeros((q, n), dtype=torch.bool, device=cost.device)
+    for gi in range(n):
+        _, pred_idx = torch.topk(cost[:, gi], k=k, largest=False)
+        matching[pred_idx, gi] = True
+    multi = matching.sum(dim=1) > 1
+    if multi.any():
+        conflicted = torch.nonzero(multi, as_tuple=False).flatten()
+        best_gt = torch.argmin(cost[conflicted], dim=1)
+        matching[conflicted] = False
+        matching[conflicted, best_gt] = True
+    pred_idx, gt_idx = torch.nonzero(matching, as_tuple=True)
+    if pred_idx.numel() == 0:
+        return _hungarian_match(cost)
+    return pred_idx.long(), gt_idx.long()
+
+
 def _dynamic_k_match(cost: torch.Tensor, line_iou: torch.Tensor, topk: int = 8) -> Tuple[torch.Tensor, torch.Tensor]:
     """CLRKD-style dynamic assignment fallback for lane priors.
 
@@ -540,6 +646,8 @@ class FusionLaneLoss(nn.Module):
                 assigner = str(getattr(cfg, 'lane_assigner', 'hungarian')).lower()
                 if assigner in {'dynamic_k', 'dynamic', 'clrkd_dynamic_k'}:
                     pred_idx, local_gt_idx = _dynamic_k_match(cost, line_iou, topk=int(getattr(cfg, 'dynamic_k_topk', 8)))
+                elif assigner in {'topk_fixed', 'topk', 'fixed_topk'}:
+                    pred_idx, local_gt_idx = _topk_fixed_match(cost, topk=int(getattr(cfg, 'topk_fixed_per_gt', 8)))
                 else:
                     pred_idx, local_gt_idx = _hungarian_match(cost)
                 if pred_idx.numel() == 0:
@@ -646,6 +754,18 @@ class FusionLaneLoss(nn.Module):
                 cls_raw = _quality_focal_loss(
                     cls_logit, iou_target,
                     gamma=float(getattr(cfg, 'qfl_gamma', 2.0)),
+                    reduction='none',
+                )
+            elif cls_loss_subtype in {'vfl', 'varifocal'}:
+                # Exp2QQ: VFL on continuous IoU target. Positives weighted by
+                # target IoU; negatives only count when sigmoid is high (i.e.,
+                # the model is confidently wrong). Breaks the alpha=0.25
+                # degenerate equilibrium that has been collapsing cls across
+                # NB39-NB45.
+                cls_raw = _varifocal_loss(
+                    cls_logit, iou_target,
+                    alpha=float(getattr(cfg, 'vfl_alpha', 0.75)),
+                    gamma=float(getattr(cfg, 'vfl_gamma', 2.0)),
                     reduction='none',
                 )
             else:

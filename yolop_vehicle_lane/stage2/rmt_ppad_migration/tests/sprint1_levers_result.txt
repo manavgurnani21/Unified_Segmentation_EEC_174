@@ -1,0 +1,1 @@
+PASS all 5 Sprint-1 lever checks (qfl_good=0.0000 qfl_bad=4.940 softmin_p=0.50 near>0.89vs0.80 lenhinge[short=0.563,exact=0.0,long=0.0])

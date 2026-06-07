@@ -1,0 +1,18 @@
+# BDD100K lane-only config for the NB96 geometry-lever ablation.
+# 2k train + 500 val - small enough for fast 3-epoch rows, large enough
+# to be representative (unlike NB95's 32-image overfit set).
+path: /content/bdd_subset_2k
+train: images/train2017
+val: images/val2017
+test: images/val2017
+
+names:
+  0: vehicle
+  1: lane
+
+type_task:
+  detection: [0]
+  segmentation: [1]
+
+lane_targets_root: /content/bdd_subset_2k/lane_targets
+lane_targets_split_map: {}

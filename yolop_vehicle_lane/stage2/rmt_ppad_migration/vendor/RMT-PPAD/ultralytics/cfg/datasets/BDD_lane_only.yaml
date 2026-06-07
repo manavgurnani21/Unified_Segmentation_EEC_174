@@ -1,0 +1,36 @@
+# BDD100K lane-only configuration for the Path-3 (CLRHead) migration.
+# Drivable area is removed; the segmentation task contains ONLY the lane class.
+#
+# Required directory layout (per the substring-replace convention in
+# YOLODataset.cache_multi_labels):
+#   <path>/images/<split>/<stem>.jpg
+#   <path>/mask/lane/<split>/<stem>.png   (kept for legacy fallback only)
+#   <lane_targets_root>/<target_split>/<stem>.pt   (P1 output, the (max_lanes, 78)
+#                                                   tensor; lane_targets_split_map
+#                                                   maps the image-dir split name
+#                                                   to the lane_targets split name)
+# Standard NB85 setup hardlinks BDD images into <path>/images/{train,val}/
+# and the lane_targets tarball goes into <lane_targets_root>/{train,val}/.
+
+path: /content/bdd_dataset             # adjust per environment
+train: images/train2017                # train images (relative to 'path')
+val: images/val2017                    # val images (relative to 'path')
+test: images/val2017
+
+# Classes - drivable removed.
+names:
+  0: vehicle
+  1: lane
+
+type_task:
+  detection: [0]
+  segmentation: [1]
+
+# P6: location of the (max_lanes, 78) .pt files generated in P1.
+# The cache loader derives `<lane_targets_root>/<split>/<stem>.pt` from
+# each `<path>/images/<split>/<stem>.jpg`.
+lane_targets_root: /content/bdd_dataset/lane_targets
+# If the lane_targets folder uses a different per-split name than the image
+# folder (e.g. images/train but lane_targets/train2017), set the mapping
+# here. Empty mapping means "use image split name unchanged".
+lane_targets_split_map: {}

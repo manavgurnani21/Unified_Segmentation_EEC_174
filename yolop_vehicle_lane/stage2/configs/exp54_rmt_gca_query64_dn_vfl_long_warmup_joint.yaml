@@ -1,0 +1,158 @@
+run:
+  name: exp54_rmt_gca_query64_dn_vfl_long_warmup_joint
+  seed: 0
+  work_dir: /content/exp54_rmt_gca_query64_dn_vfl_long_warmup_joint
+  output_tar: /content/drive/MyDrive/EcoCAR/training_runs/exp54_rmt_gca_query64_dn_vfl_long_warmup_joint.tar
+dataset:
+  bdd_archive: /content/drive/MyDrive/EcoCAR/datasets/bdd100k_clrkd_curve.tar
+  local_dir: /content/bdd100k_clrkd_curve
+  max_lanes: 10
+  num_points: 72
+  image_size:
+  - 384
+  - 640
+  org_image_size:
+  - 720
+  - 1280
+  aux_mask_size:
+  - 72
+  - 128
+  vehicle_classes:
+  - vehicle
+model:
+  detection_head:
+    type: detr
+    num_queries: 100
+    num_classes: 1
+    embed_dim: 256
+    num_decoder_layers: 3
+    num_heads: 8
+    dim_feedforward: 1024
+  lane_head:
+    # Exp2DDD: NB56 (DN-DETR + 30 ep) showed val_lane_best_f1=0.588 at
+    # EPOCH 1 (head_warmup phase, backbone frozen) -- the highest cls
+    # discrimination ever recorded on this project. The peak DEGRADED
+    # as training continued past epoch 4 (full_finetune unfreezes
+    # backbone). The cls patterns the head learned during head_warmup
+    # got destroyed once the backbone started moving.
+    #
+    # Exp2DDD: extend head_warmup to 10 epochs (vs NB56's 3), let the
+    # head fully converge on top of the random-but-stable backbone.
+    # Then 10 epochs of full_finetune with SLOW backbone (bb_lr_mult=
+    # 0.02) so backbone updates don't catastrophically destabilize the
+    # head's cls equilibrium.
+    type: query_anchor
+    embed_dim: 128
+    max_lanes: 10
+    num_points: 72
+    num_queries: 64
+    num_decoder_layers: 3
+    num_heads: 8
+    dim_feedforward: 512
+    dropout: 0.1
+    dn_num_groups: 4
+    dn_noise_std_xy: 0.05
+    dn_noise_std_theta: 0.04
+    mask_size:
+    - 72
+    - 128
+    mask_aux: true
+    num_lane_classes: 7
+  backbone: exp2b_rmt_gca
+  width: 0.5
+  use_aifi: true
+  yolo26:
+    source_root: null
+    model_path: null
+    feature_indices: null
+    strict: true
+loss:
+  det:
+    bbox_loss_weight: 5.0
+    cls_loss_weight: 1.0
+    dn_loss_weight: 0.0
+    giou_loss_weight: 2.0
+    obj_loss_weight: 1.0
+  lambda_gate_reg: 0.001
+  lambda_det: 1.5
+  lambda_lane: 1.0
+  lambda_max: 2.0
+  lambda_min: 0.5
+  lambda_mode: fixed
+  lane:
+    cls_target_type: matched_existence
+    cls_loss_type: vfl
+    vfl_alpha: 0.75
+    vfl_gamma: 2.0
+    cls_ohem_topk_per_pos: 0
+    cls_balance_mode: mean
+    line_iou_radius: 0.015
+    w_cls: 5.0
+    w_distill: 0.0
+    w_iou: 2.0
+    w_mask: 1.0
+    w_reg: 1.2
+    w_smooth: 0.05
+    w_xytl: 0.2
+    use_lane_matching: true
+    match_cost_cls: 1.0
+    match_cost_point: 5.0
+    match_cost_iou: 2.0
+    match_cost_xytl: 0.2
+    lane_assigner: hungarian
+    dynamic_k_topk: 4
+    topk_fixed_per_gt: 8
+    aux_stage_loss_weight: 1.0
+    stage1_aux_loss_weight: 0.0
+    asl_gamma_pos: 0.0
+    asl_gamma_neg: 4.0
+    asl_clip: 0.05
+    focal_alpha: 0.25
+    focal_gamma: 2.0
+    qfl_gamma: 2.0
+    lineiou_target_pow: 1.0
+  no_object_weight: 0.25
+  use_uncertainty: false
+  geometry_warmup_epochs: 1
+train:
+  lr0: 0.0002
+  # Exp2DDD: extra-slow backbone (0.02 vs default 0.1) so the head can
+  # keep its converged cls equilibrium across the phase boundary.
+  backbone_lr_mult: 0.02
+  head_lr_mult: 2.0
+  weight_decay: 0.0005
+  end_epoch: 20
+  batch_size: 8
+  workers: 2
+  grad_clip_norm: 5.0
+  val_every: 1
+  save_every: 5
+  print_every: 50
+  amp:
+    kind: bfloat16
+  lr_scheduler:
+    kind: cosine
+    warmup_epochs: 3
+    warmup_start_lr_factor: 0.1
+    min_lr_factor: 0.05
+  phases:
+  # 10-epoch head_warmup (vs NB56's 3-epoch) -- the head should fully
+  # converge to a high val_lane_best_f1 before backbone is allowed to
+  # move.
+  - name: head_warmup
+    until_epoch: 10
+  - name: full_finetune
+    until_epoch: 999
+eval:
+  val_batches: 40
+  log_grad_cosine: true
+  grad_cos_probe_interval: 50
+  lane_exist_threshold: 0.3
+  decoded_top_k: 6
+  decoded_lane_iou_threshold: 0.5
+  decoded_lane_nms_iou: 0.5
+  decoded_score_threshold: 0.0
+  decoded_score_source: cls
+  decoded_oracle_enabled: true
+teacher:
+  lane_head_checkpoint: null

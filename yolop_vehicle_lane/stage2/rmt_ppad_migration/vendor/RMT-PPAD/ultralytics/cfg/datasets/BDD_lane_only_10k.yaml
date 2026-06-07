@@ -1,0 +1,21 @@
+# BDD100K lane-only configuration for the BRIEF ablation 10k subset.
+# Polyline targets (existing P1 format). Used by NB89 row 1 for an
+# apples-to-apples comparison against the Bezier rows.
+
+path: /content/bdd_subset_10k
+train: images/train2017
+val: images/val2017
+test: images/val2017
+
+names:
+  0: vehicle
+  1: lane
+
+type_task:
+  detection: [0]
+  segmentation: [1]
+
+# Polyline (78-D) targets from the existing CLR converter.
+# prepare_bdd_subset.py extracts these into <path>/lane_targets/<split>/<stem>.pt
+lane_targets_root: /content/bdd_subset_10k/lane_targets
+lane_targets_split_map: {}

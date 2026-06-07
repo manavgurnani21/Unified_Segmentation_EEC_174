@@ -1,0 +1,27 @@
+{
+  "returncode": 0,
+  "rmt_ppad_root": "/content/drive/MyDrive/EcoCAR/yolop_vehicle_lane/stage2/rmt_ppad_migration/vendor/RMT-PPAD",
+  "checkpoint": "/content/drive/MyDrive/EcoCAR/downloads/rmt_ppad_weights/rmt_ppad_best.pt",
+  "bdd_root": "/content/BDD_seg_mask",
+  "imgsz": 640,
+  "batch": 1,
+  "mask_threshold": [
+    0.45,
+    0.9
+  ],
+  "metrics": {
+    "detection_precision": 0.0345,
+    "detection_recall": 0.954,
+    "detection_map50": 0.849,
+    "detection_map": 0.519,
+    "drivable_pixacc": 0.981,
+    "drivable_subacc": 0.942,
+    "drivable_iou": 0.875,
+    "drivable_miou": 0.926,
+    "lane_pixacc": 0.99,
+    "lane_acc": 0.847,
+    "lane_iou": 0.568,
+    "lane_miou": 0.779
+  },
+  "log_path": "/content/drive/MyDrive/EcoCAR/yolop_vehicle_lane/stage2/rmt_ppad_migration/results/baseline_metrics.log"
+}

@@ -1,0 +1,2 @@
+FAIL
+pred/GT IoU=0.025 (<0.3 -> pred & GT encodings disagree)

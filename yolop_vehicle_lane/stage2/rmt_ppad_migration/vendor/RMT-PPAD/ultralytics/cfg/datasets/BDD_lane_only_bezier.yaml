@@ -1,0 +1,26 @@
+# BDD100K lane-only configuration for the Bezier extension (B1-B7 +
+# BLcm). Differences from BDD_lane_only.yaml:
+#   - lane_targets_root points at the BEZIER targets directory (16-D .pt)
+#   - dataset layout otherwise identical
+
+path: /content/bdd_subset_10k               # produced by prepare_bdd_subset_10k.py
+train: images/train2017
+val: images/val2017
+test: images/val2017
+
+names:
+  0: vehicle
+  1: lane
+
+type_task:
+  detection: [0]
+  segmentation: [1]
+
+# B1: (max_lanes, 16) Bezier .pt files. The dataset's rasterizer
+# auto-dispatches between polyline (78-D) and bezier (16-D) targets by
+# inspecting the loaded tensor's shape, so no other code path needs to
+# change to support bezier here.
+# convert_polyline_pt_to_bezier_pt.py writes these into
+#   <path>/lane_targets_bezier/<split>/<stem>.pt
+lane_targets_root: /content/bdd_subset_10k/lane_targets_bezier
+lane_targets_split_map: {}

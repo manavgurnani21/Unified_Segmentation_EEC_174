@@ -278,6 +278,21 @@ class BDDJointCurveDataset(Dataset):
             items.append(self.root / rel)
         if limit and limit > 0:
             items = items[:limit]
+
+        # NB74 (CULane) revealed that prior incomplete extractions leave
+        # train_gt.txt referencing .jpg files that don't exist. Pre-filter the
+        # list once to drop missing images upfront -- much cleaner than
+        # skipping during __getitem__ in workers. The check is fast (just
+        # path.exists on already-cached inodes after extraction).
+        before = len(items)
+        items = [p for p in items if p.exists()]
+        dropped = before - len(items)
+        if dropped > 0:
+            print(f'[dataset:{split}] dropped {dropped} / {before} samples '
+                  f'because their .jpg files do not exist on disk. '
+                  f'This usually means the dataset extraction was incomplete. '
+                  f'If many were dropped, re-run the prep step with a force flag.',
+                  flush=True)
         self.items = items
         if not self.items:
             raise RuntimeError(f'No samples found in {list_file}')
@@ -303,10 +318,34 @@ class BDDJointCurveDataset(Dataset):
         return len(self.items)
 
     def __getitem__(self, idx: int):
-        img_path = self.items[idx]
-        image = cv2.imread(str(img_path))
-        if image is None:
-            raise FileNotFoundError(f'Failed to read image: {img_path}')
+        # NB74 (CULane) revealed that incomplete prior extractions can leave
+        # train_gt.txt referencing .jpg files that don't exist on disk. Crashing
+        # on the first missing image breaks the entire epoch. Instead, skip
+        # silently to the next sample. We track how many were skipped so the
+        # warning prints exactly once per worker per epoch and the user knows
+        # to re-extract.
+        tries = 0
+        last_path = None
+        while tries < min(64, len(self.items)):
+            i = (idx + tries) % len(self.items)
+            img_path = self.items[i]
+            image = cv2.imread(str(img_path))
+            if image is not None:
+                break
+            last_path = img_path
+            tries += 1
+        else:
+            # Walked 64 items and every one missing -- something is catastrophically wrong.
+            raise FileNotFoundError(
+                f'Failed to read any image after {tries} attempts starting at idx {idx}. '
+                f'Last failed path: {last_path}. The dataset extraction is incomplete -- '
+                f're-run NB74 cell 3 after deleting /content/CULane (or pass --force-extract '
+                f'to the prep script when that flag is added).')
+        if tries > 0 and not getattr(self, '_skip_warned', False):
+            print(f'[dataset:{self.split}] WARNING: skipped {tries} missing image(s) '
+                  f'near idx {idx} (e.g. {last_path}). Set _skip_warned=True so this '
+                  f'message only prints once per worker.', flush=True)
+            self._skip_warned = True
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         org_h, org_w = image.shape[:2]
         resized = cv2.resize(image, (self.image_size[1], self.image_size[0]), interpolation=cv2.INTER_LINEAR)
@@ -539,6 +578,13 @@ def main() -> None:
     parser.add_argument('--no-grad-cosine', action='store_true')
     parser.add_argument('--allow-empty-det-labels', action='store_true')
     parser.add_argument('--force-extract', action='store_true', help='Delete the local curve dataset and re-extract the tar archive before training.')
+    # Speedup CLI knobs. Default to None so config wins when not specified.
+    parser.add_argument('--workers', type=int, default=None, help='DataLoader num_workers (overrides cfg.train.workers). Try 6-8 for Colab Pro+.')
+    parser.add_argument('--prefetch-factor', type=int, default=4, help='DataLoader prefetch_factor (per worker). 4 keeps GPU well-fed.')
+    parser.add_argument('--no-persistent-workers', action='store_true', help='Disable persistent_workers (default: enabled when workers>0).')
+    parser.add_argument('--torch-compile', action='store_true', help='Wrap the joint model in torch.compile(reduce-overhead). 20-40 percent speedup on transformer backbones.')
+    parser.add_argument('--channels-last', action='store_true', help='Convert model + inputs to channels_last memory format. 10-30 percent speedup on Ampere/Hopper.')
+    parser.add_argument('--pretrained-backbone', type=str, default=None, help='Path to a pretrained backbone checkpoint (RMT-PPAD, YOLOPv2, or generic state_dict). Loads with shape-mismatch tolerance.')
     args = parser.parse_args()
 
     with open(args.config, 'r', encoding='utf-8') as fh:
@@ -548,7 +594,12 @@ def main() -> None:
     torch.set_num_threads(min(8, os.cpu_count() or 2))
     cfg['run']['seed'] = seed
 
-    curve_tar = Path(args.curve_tar or cfg['dataset']['bdd_archive'])
+    # Accept None curve_tar so CULane / TuSimple runs (where the dataset is
+    # pre-extracted into curve_root) don't crash on Path(None). When both
+    # curve_tar and bdd_archive are None/empty we skip the extract step and
+    # trust curve_root has the data laid out already.
+    raw_tar = args.curve_tar or cfg.get('dataset', {}).get('bdd_archive')
+    curve_tar = Path(raw_tar) if raw_tar else None
     curve_root = Path(args.curve_root or cfg['dataset']['local_dir'])
     work_dir = ensure_dir(Path(args.work_dir or cfg['run']['work_dir']))
     output_tar = Path(args.output_tar or cfg['run']['output_tar'])
@@ -557,14 +608,19 @@ def main() -> None:
     log('==== Stage 2 Joint Training Preflight ====')
     log(f"run_name={cfg['run'].get('name')}")
     log(f'config={args.config}')
-    log(f'curve_tar={curve_tar}')
+    log(f'curve_tar={curve_tar if curve_tar else "<none -- using pre-extracted curve_root>"}')
     log(f'curve_root={curve_root}')
     log(f'work_dir={work_dir}')
     log(f'output_tar={output_tar}')
     log(f"backbone={cfg['model'].get('backbone')} detection_head={cfg['model'].get('detection_head', {}).get('type')} lane_head=CLRKD-style curve head")
     log(f"epochs={args.epochs or cfg['train']['end_epoch']} batch_size={args.batch_size or cfg['train']['batch_size']} print_every={cfg['train'].get('print_every')} limit_train={args.limit_train} limit_val={args.limit_val}")
     log(f"loss=lambda_mode:{cfg['loss'].get('lambda_mode')} lambda_lane:{cfg['loss'].get('lambda_lane')} use_uncertainty:{cfg['loss'].get('use_uncertainty')}")
-    extract_tar_once(curve_tar, curve_root, force=args.force_extract)
+    if curve_tar is not None:
+        extract_tar_once(curve_tar, curve_root, force=args.force_extract)
+    else:
+        log(f'[dataset] pre-extracted mode: curve_root={curve_root} (no archive to expand).')
+        if not curve_root.exists():
+            raise FileNotFoundError(f'curve_root {curve_root} does not exist and no archive given.')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if torch.cuda.is_available():
@@ -597,12 +653,47 @@ def main() -> None:
         limit=args.limit_val,
         require_det_labels=not args.allow_empty_det_labels,
     )
-    train_loader = DataLoader(train_set, batch_size=args.batch_size or int(cfg['train']['batch_size']), shuffle=True, num_workers=int(cfg['train'].get('workers', 2)), pin_memory=True, collate_fn=collate_fn, drop_last=True)
-    val_loader = DataLoader(val_set, batch_size=args.batch_size or int(cfg['train']['batch_size']), shuffle=False, num_workers=int(cfg['train'].get('workers', 2)), pin_memory=True, collate_fn=collate_fn)
-    log(f'[loader] train_batches={len(train_loader)} val_batches={len(val_loader)} workers={int(cfg["train"].get("workers", 2))}')
+    # Speedup patch (2026-05): NB70/71 took 5000s/epoch at batch=8, num_workers=2.
+    # GPU utilization was 5-10% of 95.6 GB. Three knobs:
+    # 1) `workers` from CLI takes precedence so we can crank it without rerunning configs.
+    # 2) `persistent_workers=True` keeps the dataloader processes alive across epochs --
+    #    on full data (8750+ iters) this avoids tearing down 6 workers every epoch.
+    # 3) `prefetch_factor=4` lets workers buffer 4 batches each so the GPU never idles
+    #    waiting on the next batch.
+    # CLI flags (--workers, --no-persistent-workers) win over config so users can dial
+    # for the actual machine without touching yaml.
+    _workers = int(args.workers if args.workers is not None else cfg['train'].get('workers', 2))
+    _persistent = bool(_workers > 0 and not args.no_persistent_workers)
+    _prefetch = int(args.prefetch_factor) if (args.prefetch_factor and _workers > 0) else None
+    loader_kwargs = dict(num_workers=_workers, pin_memory=True, collate_fn=collate_fn)
+    if _persistent:
+        loader_kwargs['persistent_workers'] = True
+    if _prefetch is not None:
+        loader_kwargs['prefetch_factor'] = _prefetch
+    train_loader = DataLoader(train_set, batch_size=args.batch_size or int(cfg['train']['batch_size']), shuffle=True, drop_last=True, **loader_kwargs)
+    val_loader = DataLoader(val_set, batch_size=args.batch_size or int(cfg['train']['batch_size']), shuffle=False, **loader_kwargs)
+    log(f'[loader] train_batches={len(train_loader)} val_batches={len(val_loader)} workers={_workers} persistent={_persistent} prefetch={_prefetch}')
 
     model = build_joint_model(cfg).to(device)
-    total_params = sum(p.numel() for p in model.parameters())
+    # Pretrained backbone loading (speedup priority 2). Tries to map a checkpoint
+    # state_dict into model.backbone with shape-mismatch tolerance. Reports which
+    # keys actually loaded so we can verify the mapping isn't silently failing.
+    if args.pretrained_backbone:
+        from stage2.fusion.pretrained_loader import load_pretrained_backbone
+        ok, total = load_pretrained_backbone(model, args.pretrained_backbone)
+        log(f'[pretrained] loaded {ok}/{total} backbone tensors from {args.pretrained_backbone}')
+    if args.channels_last:
+        # Memory layout change. cudnn picks faster kernels on Ampere/Hopper
+        # when conv inputs are NHWC. Must be applied before torch.compile.
+        model = model.to(memory_format=torch.channels_last)
+        log('[speed] channels_last memory format enabled')
+    if args.torch_compile:
+        try:
+            model = torch.compile(model, mode='reduce-overhead', fullgraph=False)
+            log('[speed] torch.compile(reduce-overhead) wrapped the model')
+        except Exception as exc:
+            log(f'[speed] torch.compile failed -- continuing without it: {exc}')
+    total_params = sum(p.numel() for p in (model.parameters() if hasattr(model, 'parameters') else model._orig_mod.parameters()))
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log(f'[model] class={model.__class__.__name__} params={total_params:,} trainable_initial={trainable_params:,}')
     if hasattr(model, 'feature_channels'):
@@ -837,12 +928,24 @@ def main() -> None:
         (work_dir / 'metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
         (work_dir / 'config_snapshot.yaml').write_text(yaml.safe_dump(cfg, sort_keys=False), encoding='utf-8')
 
+    # Export backbone-only state_dict for use as a pretrained init in future
+    # joint runs. This is the artifact that lets a CULane-pretrained backbone
+    # initialize a BDD100K joint run (Priority 3 of the speed/pretrain/CULane plan).
+    try:
+        _model_for_export = model._orig_mod if hasattr(model, '_orig_mod') else model
+        if hasattr(_model_for_export, 'backbone'):
+            backbone_sd = _model_for_export.backbone.state_dict()
+            torch.save({'state_dict': backbone_sd, 'config_snapshot': cfg.get('model', {})}, work_dir / 'backbone_pretrained.pt')
+            log(f'[export] wrote backbone-only checkpoint to {work_dir / "backbone_pretrained.pt"}')
+    except Exception as exc:
+        log(f'[export] WARNING: failed to export backbone-only checkpoint: {exc}')
+
     ensure_dir(output_tar.parent)
     if output_tar.exists():
         output_tar.unlink()
     subprocess.check_call(['tar', '-cf', str(output_tar), '-C', str(work_dir), '.'])
     log(f'Wrote {output_tar}')
-    log('Training artifacts inside tar: best.pt, last.pt, metrics.json, config_snapshot.yaml')
+    log('Training artifacts inside tar: best.pt, last.pt, metrics.json, config_snapshot.yaml, backbone_pretrained.pt')
 
 
 if __name__ == '__main__':
