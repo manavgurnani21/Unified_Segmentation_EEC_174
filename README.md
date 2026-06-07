@@ -17,10 +17,10 @@ complementary thrusts:
 
 | Approach | Task | Key results on BDD100K |
 |---|---|---|
-| **YOLOPX (optimized)** — *team* | Vehicle detection + lane mask | Vehicle **mAP50 82.78%**, **recall 93.05%**; **2.7 → 47.5 FPS (17.6× speedup)**, 170 FPS on an A5000 (FP16) |
-| **RMT-PPAD** — *Siyun* | Joint detection + **vectorized polyline lanes** | **curve-F1 0.621**, **curveIoU 0.752**, detection **mAP50 0.835** (epoch 37 / 120, still improving) |
-| **YOLO26 multi-task** — *Siyun* | Vehicle detection + lane mask | detection-only **mAP50 53.7%**, mAP50-95 31.0% |
-| **DETR-GeoLane** — *Siyun* | Joint detection + polyline lanes | experimental; validated the ordered-point lane formulation |
+| **YOLOPX (optimized)** | Vehicle detection + lane mask | Vehicle **mAP50 82.78%**, **recall 93.05%**; **2.7 → 47.5 FPS (17.6× speedup)**, 170 FPS on an A5000 (FP16) |
+| **RMT-PPAD** | Joint detection + **vectorized polyline lanes** | **curve-F1 0.621**, **curveIoU 0.752**, detection **mAP50 0.835** (epoch 37 / 120, still improving) |
+| **YOLO26 multi-task** | Vehicle detection + lane mask | detection-only **mAP50 53.7%**, mAP50-95 31.0% |
+| **DETR-GeoLane** | Joint detection + polyline lanes | experimental; validated the ordered-point lane formulation |
 
 > The geometric models are reported with **curve-F1 / curveIoU** (a decode-rasterize-match metric)
 > rather than pixel-IoU, which saturates near ~0.05 for thin lane lines and is uninformative.
@@ -41,14 +41,14 @@ Reported results of the YOLOP family on the BDD100K validation set (from the ori
 
 ## Approaches
 
-### 1. Real-time YOLOPX panoptic pipeline *(team)*
+### 1. Real-time YOLOPX panoptic pipeline
 YOLOPX is used as the baseline and optimized for deployment: the unneeded drivable-area head is
 ablated, and the inference pipeline is rebuilt from the ground up with a multi-threaded
 producer-consumer system (NVIDIA DALI) that removes CPU decode/visualization bottlenecks. INT8 /
 FP16 / FP32 were compared; FP16 is the chosen balance of speed and accuracy. Code lives in
 `lib/`, `tools/`, and `yolop_vehicle_lane/stage1/`.
 
-### 2. RMT-PPAD — vectorized polyline lanes *(Siyun)*
+### 2. RMT-PPAD — vectorized polyline lanes
 A ~35.5M-parameter multi-task transformer: a shared **RT-DETR HGNetv2** backbone feeds a detection
 decoder (300 queries) and a **CLRNet-style polyline lane head**, coupled by a Gate-Control Adapter.
 Each lane is an ordered set of points (start, orientation, length, 72 per-row offsets) — directly
@@ -61,13 +61,13 @@ Key engineering results:
 
 Code: `yolop_vehicle_lane/stage2/rmt_ppad_migration/`.
 
-### 3. YOLO26 multi-task *(Siyun)*
+### 3. YOLO26 multi-task
 An Ultralytics **YOLO26-S** backbone shared between a 5-class vehicle-detection head and a
 transformer lane-segmentation head (160×160 mask). Confirmed shared-backbone multi-task is viable
 (detection-only 53.7% mAP50) but the binary-mask lane head inherits the saturation/lack-of-geometry
 of the YOLOP family — motivating the geometric approaches above.
 
-### 4. DETR-GeoLane *(Siyun)*
+### 4. DETR-GeoLane
 A dual-path model (ResNet-50 + FPN) with an RT-DETR-style detection decoder and a **MapTR-style**
 polyline lane decoder (72-point lanes with per-point visibility). It validated the ordered-point
 lane formulation but was hard to optimize from scratch, motivating the pre-trained RMT-PPAD design.
